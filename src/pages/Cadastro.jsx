@@ -41,7 +41,7 @@ export default function Cadastro() {
             <LogoCAH size={72} />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-wide">CAH</h1>
-          <p className="text-sm mt-1" style={{ color: '#C9A227' }}>Vistoria Fácil</p>
+          <p className="text-sm mt-1" style={{ color: '#C9A227' }}>Vistoria Fácil <span style={{ fontSize: '10px', opacity: 0.7 }}>v1.0</span></p>
         </div>
 
         <div className="rounded-2xl p-6 shadow-xl" style={{ background: '#F7F6F3', border: '1px solid #E4E0D8' }}>

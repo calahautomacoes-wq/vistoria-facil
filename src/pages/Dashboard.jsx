@@ -69,7 +69,7 @@ export default function Dashboard() {
             <LogoCAH size={36} />
             <div>
               <span className="font-bold text-white text-sm tracking-wide">CAH</span>
-              <span className="text-xs ml-1.5" style={{ color: '#C9A227' }}>Vistoria Fácil</span>
+              <span className="text-xs ml-1.5" style={{ color: '#C9A227' }}>Vistoria Fácil <span style={{ fontSize: '9px', opacity: 0.7 }}>v1.0</span></span>
             </div>
           </div>
           <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs transition"
