@@ -84,7 +84,19 @@ export default function StepTipo() {
 
         <div className="grid grid-cols-2 gap-3">
           <Campo label="Início do Contrato">
-            <input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)}
+            <input type="date" value={dataInicio}
+              onChange={(e) => {
+                const inicio = e.target.value
+                setDataInicio(inicio)
+                if (inicio) {
+                  // Calcula fim = início + 30 meses
+                  const d = new Date(inicio + 'T12:00:00')
+                  d.setMonth(d.getMonth() + 30)
+                  // Subtrai 1 dia (fim no último dia antes do próximo período)
+                  d.setDate(d.getDate() - 1)
+                  setDataFim(d.toISOString().split('T')[0])
+                }
+              }}
               className="w-full rounded-lg px-3 py-2.5 text-sm focus:outline-none"
               style={inp} onFocus={onF} onBlur={onB} />
           </Campo>
@@ -94,6 +106,11 @@ export default function StepTipo() {
               style={inp} onFocus={onF} onBlur={onB} />
           </Campo>
         </div>
+        {dataInicio && dataFim && (
+          <p className="text-xs" style={{ color: '#C9A227' }}>
+            ✓ Vigência de 30 meses — fim calculado automaticamente. Ajuste manualmente se necessário.
+          </p>
+        )}
 
         <Campo label="Prazo para contestação (dias)">
           <select value={prazoContestacao} onChange={(e) => setPrazoContestacao(e.target.value)}
