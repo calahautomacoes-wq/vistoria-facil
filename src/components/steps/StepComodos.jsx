@@ -1,8 +1,136 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { useVistoriaStore } from '../../store/vistoriaStore'
-import { Plus, Trash2, Camera, Image as ImageIcon, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
+import { Plus, Trash2, Camera, Image as ImageIcon, ChevronDown, ChevronUp, Pencil, X, ZoomIn } from 'lucide-react'
 import { descreverFoto } from '../../lib/claude'
 import { uuid } from '../../lib/uuid'
+
+// ─── Modal de câmera via getUserMedia ─────────────────────────────────────────
+function CameraModal({ onCapturar, onFechar }) {
+  const videoRef  = useRef(null)
+  const streamRef = useRef(null)
+  const [erro, setErro]         = useState('')
+  const [pronto, setPronto]     = useState(false)
+  const [facingBack, setFacingBack] = useState(true)
+
+  const iniciarCamera = useCallback(async (traseira = true) => {
+    // Para stream anterior se existir
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+    }
+    setPronto(false)
+    setErro('')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: traseira ? 'environment' : 'user',
+          width:  { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.onloadedmetadata = () => setPronto(true)
+      }
+    } catch (err) {
+      setErro(
+        err.name === 'NotAllowedError'
+          ? 'Permissão de câmera negada. Libere o acesso nas configurações do navegador.'
+          : `Câmera indisponível: ${err.message}`
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    iniciarCamera(true)
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop())
+    }
+  }, [iniciarCamera])
+
+  function capturar() {
+    if (!videoRef.current || !pronto) return
+    const video  = videoRef.current
+    const canvas = document.createElement('canvas')
+    canvas.width  = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0)
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      const arquivo = new File([blob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' })
+      onCapturar(arquivo)
+    }, 'image/jpeg', 0.92)
+  }
+
+  function alternarCamera() {
+    const nova = !facingBack
+    setFacingBack(nova)
+    iniciarCamera(nova)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#000' }}>
+      {/* Vídeo */}
+      <div className="flex-1 relative overflow-hidden">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover"
+        />
+        {!pronto && !erro && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <p className="text-white text-sm">Iniciando câmera...</p>
+          </div>
+        )}
+        {erro && (
+          <div className="absolute inset-0 flex items-center justify-center px-6">
+            <div className="rounded-xl p-5 text-center" style={{ background: '#1a1a1a' }}>
+              <p className="text-red-400 text-sm mb-4">{erro}</p>
+              <button onClick={onFechar}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: '#C9A227', color: '#000' }}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Botão fechar */}
+        <button onClick={onFechar}
+          className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+          <X size={20} />
+        </button>
+        {/* Virar câmera (só aparece se tiver câmera frontal/traseira) */}
+        <button onClick={alternarCamera}
+          className="absolute top-4 left-4 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold"
+          style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}
+          title="Alternar câmera">
+          🔄
+        </button>
+      </div>
+
+      {/* Controles */}
+      <div className="flex items-center justify-center gap-6 py-6" style={{ background: '#0a0a0a' }}>
+        <button onClick={onFechar}
+          className="px-5 py-2.5 rounded-xl text-sm font-semibold"
+          style={{ background: '#2a2a2a', color: '#fff' }}>
+          Cancelar
+        </button>
+        <button
+          onClick={capturar}
+          disabled={!pronto}
+          className="w-16 h-16 rounded-full flex items-center justify-center transition disabled:opacity-40"
+          style={{ background: 'linear-gradient(135deg, #C9A227, #E8C547)', boxShadow: '0 0 0 4px #C9A22744' }}>
+          <Camera size={28} color="#000" />
+        </button>
+        <div className="w-20" />{/* espaço para equilíbrio */}
+      </div>
+    </div>
+  )
+}
 
 const TIPOS_RAPIDOS = [
   'Sala', 'Quarto', 'Suíte', 'Banheiro', 'Lavabo',
@@ -29,6 +157,7 @@ export default function StepComodos() {
   const [nomeCustom, setNomeCustom]   = useState('')
   const [expandido, setExpandido]     = useState({})
   const [descrevendo, setDescrevendo] = useState({})
+  const [cameraAberta, setCameraAberta] = useState(null) // comodoId ou null
   function adicionar(nome) {
     const n = nome.trim()
     if (!n) return
@@ -130,11 +259,23 @@ export default function StepComodos() {
           onToggle={() => setExpandido((prev) => ({ ...prev, [comodo.id]: !prev[comodo.id] }))}
           onRemove={() => removeComodo(comodo.id)}
           onFoto={(arquivo) => handleFoto(comodo.id, arquivo)}
+          onAbrirCamera={() => setCameraAberta(comodo.id)}
           onRemoveFoto={(fotoId) => removeFotoComodo(comodo.id, fotoId)}
           onUpdateFoto={(fotoId, dados) => updateFotoComodo(comodo.id, fotoId, dados)}
           onUpdateItem={(itemId, dados) => updateItemComodo(comodo.id, itemId, dados)}
         />
       ))}
+
+      {/* Modal de câmera */}
+      {cameraAberta && (
+        <CameraModal
+          onCapturar={(arquivo) => {
+            handleFoto(cameraAberta, arquivo)
+            setCameraAberta(null)
+          }}
+          onFechar={() => setCameraAberta(null)}
+        />
+      )}
     </div>
   )
 }
@@ -142,9 +283,8 @@ export default function StepComodos() {
 // ─── Card de cada cômodo ──────────────────────────────────────────────────────
 function ComodoCard({
   comodo, expandido, onToggle, onRemove,
-  onFoto, onRemoveFoto, onUpdateFoto, onUpdateItem,
+  onFoto, onAbrirCamera, onRemoveFoto, onUpdateFoto, onUpdateItem,
 }) {
-  const cameraRef  = useRef(null)
   const galeriaRef = useRef(null)
   const [obsAberta, setObsAberta] = useState({})
 
@@ -304,17 +444,13 @@ function ComodoCard({
               </div>
             ))}
 
-            {/* Inputs de arquivo (ocultos) */}
-            {/* capture="environment" → abre câmera traseira no celular */}
-            <input ref={cameraRef} type="file" accept="image/*,video/*" capture="environment" className="hidden"
-              onChange={(e) => { if (e.target.files[0]) onFoto(e.target.files[0]); e.target.value = '' }} />
-            {/* sem capture → abre galeria/seletor nativo */}
+            {/* Input galeria (sem capture — abre seletor de arquivo) */}
             <input ref={galeriaRef} type="file" accept="image/*" multiple className="hidden"
               onChange={(e) => { Array.from(e.target.files).forEach((f) => onFoto(f)); e.target.value = '' }} />
 
-            {/* Sempre mostra os dois botões — funciona em celular e desktop */}
+            {/* Câmera via getUserMedia | Galeria via file input */}
             <div className="grid grid-cols-2 gap-2">
-              <BtnFoto onClick={() => cameraRef.current?.click()}  icon={<Camera size={16} />}    label="Câmera" />
+              <BtnFoto onClick={onAbrirCamera}                     icon={<Camera size={16} />}    label="Câmera" />
               <BtnFoto onClick={() => galeriaRef.current?.click()} icon={<ImageIcon size={16} />} label="Galeria" />
             </div>
           </div>
