@@ -99,8 +99,11 @@ function fmtData(iso) {
 
 // ── Gerador principal ─────────────────────────────────────────────────────────
 export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testemunhas, comodos, medidores }) {
-  const proprietarios = (pessoas || []).filter((p) => p.papel === 'proprietario')
-  const inquilinos    = (pessoas || []).filter((p) => p.papel === 'inquilino')
+  let _etapa = 'início'
+  try {
+
+  const proprietarios = (pessoas || []).filter((pe) => pe.papel === 'proprietario')
+  const inquilinos    = (pessoas || []).filter((pe) => pe.papel === 'inquilino')
   const testemunhasList = testemunhas || []
 
   const COND_COR   = { bom: '27AE60', regular: 'E67E22', ruim: 'E74C3C' }
@@ -109,6 +112,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   const conteudo = []
 
   // ── TÍTULO ──────────────────────────────────────────────────────────────────
+  _etapa = 'título'
   conteudo.push(
     p([tr('LAUDO DE VISTORIA IMOBILIÁRIA', { bold: true, size: 36, color: ESCURO })],
       { align: AlignmentType.CENTER, after: 60 }),
@@ -118,6 +122,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   )
 
   // ── DADOS DA VISTORIA ────────────────────────────────────────────────────────
+  _etapa = 'dados da vistoria'
   conteudo.push(tituloSecao('Dados da Vistoria'))
   conteudo.push(
     new Table({
@@ -145,6 +150,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   )
 
   // ── IMÓVEL ───────────────────────────────────────────────────────────────────
+  _etapa = 'imóvel'
   if (imovel) {
     const endereco    = [imovel.logradouro, imovel.numero, imovel.complemento].filter(Boolean).join(', ')
     const cidadeEstado = [imovel.cidade, imovel.estado].filter(Boolean).join('/')
@@ -176,6 +182,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   }
 
   // ── ENVOLVIDOS ───────────────────────────────────────────────────────────────
+  _etapa = 'envolvidos'
   if (pessoas?.length) {
     conteudo.push(tituloSecao('Envolvidos'))
 
@@ -246,6 +253,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   }
 
   // ── CÔMODOS ──────────────────────────────────────────────────────────────────
+  _etapa = 'cômodos'
   for (const comodo of (comodos || [])) {
     conteudo.push(tituloSecao(comodo.nome))
 
@@ -365,6 +373,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   }
 
   // ── MEDIDORES ─────────────────────────────────────────────────────────────────
+  _etapa = 'medidores'
   if (medidores) {
     const pares = [
       medidores.agua  !== undefined && ['Água (m³)',  medidores.agua],
@@ -420,14 +429,15 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   }
 
   // ── ASSINATURAS ───────────────────────────────────────────────────────────────
+  _etapa = 'assinaturas'
   conteudo.push(
     p('', { before: 300 }),
     tituloSecao('Assinaturas'),
   )
 
   const assinantes = [
-    ...proprietarios.map((p) => ({ tipo: 'Proprietário(a)', nome: p.nome, cpf: p.cpf })),
-    ...inquilinos.map((p)    => ({ tipo: 'Inquilino(a)',    nome: p.nome, cpf: p.cpf })),
+    ...proprietarios.map((pe) => ({ tipo: 'Proprietário(a)', nome: pe.nome, cpf: pe.cpf })),
+    ...inquilinos.map((pe)    => ({ tipo: 'Inquilino(a)',    nome: pe.nome, cpf: pe.cpf })),
     { tipo: 'Vistoriador(a)', nome: vistoria.vistoriador, cpf: null },
     ...testemunhasList.map((t) => ({ tipo: 'Testemunha', nome: t.nome, cpf: t.cpf })),
   ]
@@ -461,6 +471,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   })
 
   // ── MONTAR DOCUMENTO ─────────────────────────────────────────────────────────
+  _etapa = 'montar documento'
   const agora = new Date().toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -506,5 +517,10 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
     }],
   })
 
+  _etapa = 'Packer.toBlob'
   return await Packer.toBlob(doc)
+
+  } catch (err) {
+    throw new Error(`Falha na etapa "${_etapa}": ${err?.message || err}`)
+  }
 }
