@@ -4,6 +4,7 @@ import Cadastro from './pages/Cadastro'
 import Dashboard from './pages/Dashboard'
 import NovaVistoria from './pages/NovaVistoria'
 import Vistoria from './pages/Vistoria'
+import Admin from './pages/Admin'
 import { BYPASS_LOGIN } from './config'
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/nova-vistoria" element={<NovaVistoria />} />
         <Route path="/vistoria/:id" element={<Vistoria />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </BrowserRouter>
   )
