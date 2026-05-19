@@ -77,7 +77,7 @@ function celula(texto, opts = {}) {
   })
 }
 
-// ── Busca imagem como ArrayBuffer (para o docx) ───────────────────────────────
+// ── Busca imagem como Uint8Array (para o ImageRun do docx) ───────────────────
 async function fetchBuffer(url) {
   try {
     const { data: { session } } = await supabase.auth.getSession()
@@ -86,7 +86,8 @@ async function fetchBuffer(url) {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     if (!res.ok) return null
-    return await res.arrayBuffer()
+    const arrayBuffer = await res.arrayBuffer()
+    return new Uint8Array(arrayBuffer)  // docx exige Uint8Array no browser
   } catch { return null }
 }
 
@@ -323,29 +324,40 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
     if (comodo.fotos?.length) {
       for (const foto of comodo.fotos) {
         const url = foto.url_publica || foto.url
-        if (!url) continue
+        const descricao = foto.descricao_editada || foto.descricao_ia || '—'
 
-        const buffer = await fetchBuffer(url)
-        if (buffer) {
-          const tipo = url.toLowerCase().includes('.png') ? 'png' : 'jpg'
-          conteudo.push(
-            new Paragraph({
-              spacing: { before: 80, after: 40 },
-              children: [new ImageRun({
-                type: tipo,
-                data: buffer,
-                transformation: { width: 420, height: 260 },
-                altText: { title: 'Foto', description: foto.descricao_editada || '', name: 'foto' },
-              })],
-            }),
-            p([tr(foto.descricao_editada || foto.descricao_ia || '—',
-                { size: 18, color: CINZA, italics: true })],
-              { after: 120 }),
-          )
-        } else {
-          conteudo.push(p(`[Foto: ${foto.descricao_editada || foto.descricao_ia || 'sem descrição'}]`,
-            { size: 18, color: CINZA }))
+        if (url) {
+          const buffer = await fetchBuffer(url)
+          if (buffer && buffer.byteLength > 0) {
+            // Detecta tipo pela extensão ou assume jpeg
+            const urlLower = url.toLowerCase()
+            const tipo = urlLower.includes('.png') ? 'png'
+              : urlLower.includes('.gif') ? 'gif'
+              : 'jpg'
+            try {
+              conteudo.push(
+                new Paragraph({
+                  spacing: { before: 80, after: 40 },
+                  children: [new ImageRun({
+                    type: tipo,
+                    data: buffer,
+                    transformation: { width: 420, height: 260 },
+                    altText: { title: 'Foto', description: descricao, name: 'foto' },
+                  })],
+                }),
+              )
+            } catch {
+              // Se a imagem falhar, registra texto no lugar
+              conteudo.push(p(`[Foto não pôde ser incluída]`, { size: 18, color: CINZA, italics: true }))
+            }
+          } else {
+            conteudo.push(p(`[Foto indisponível]`, { size: 18, color: CINZA, italics: true }))
+          }
         }
+
+        conteudo.push(
+          p([tr(descricao, { size: 18, color: CINZA, italics: true })], { after: 120 }),
+        )
       }
     }
 

@@ -164,8 +164,8 @@ export default function Vistoria() {
       a.href = url; a.download = `${nome}.docx`; a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error(err)
-      alert('Erro ao gerar Word. Tente novamente.')
+      console.error('Erro DOCX:', err)
+      alert(`Erro ao gerar Word:\n${err?.message || err}`)
     }
     setGerandoDOCX(false)
   }
