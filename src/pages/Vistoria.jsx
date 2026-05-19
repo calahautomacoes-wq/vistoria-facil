@@ -182,9 +182,44 @@ export default function Vistoria() {
     }
   }
 
-  function abrirWhatsApp() {
-    const texto = encodeURIComponent(`Olá! Segue o laudo de vistoria do imóvel em ${imovel?.logradouro || ''}, ${imovel?.cidade || ''}. Por favor, verifique o PDF em anexo.`)
-    window.open(`https://wa.me/?text=${texto}`, '_blank')
+  async function abrirWhatsApp() {
+    // Garante que o PDF existe
+    let blob = pdfBlob
+    let nome = pdfNome
+    if (!blob) {
+      setGerandoPDF(true)
+      try {
+        nome = `laudo-vistoria-${imovel?.cidade || 'imovel'}-${vistoria?.data_vistoria || 'sem-data'}`
+        blob = await gerarPDF(nome, true)
+        setPdfBlob(blob)
+        setPdfNome(nome)
+      } catch { setGerandoPDF(false); return }
+      setGerandoPDF(false)
+    }
+
+    const arquivo = new File([blob], `${nome || 'laudo-vistoria'}.pdf`, { type: 'application/pdf' })
+
+    // Mobile: usa Web Share API com arquivo → abre menu nativo e usuário escolhe WhatsApp
+    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      try {
+        await navigator.share({
+          files: [arquivo],
+          title: 'Laudo de Vistoria',
+          text: `Laudo de vistoria — ${imovel?.logradouro || ''}, ${imovel?.cidade || ''}`,
+        })
+      } catch { /* cancelado pelo usuário */ }
+      return
+    }
+
+    // Desktop fallback: baixa o PDF + abre WhatsApp com texto
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `${nome || 'laudo-vistoria'}.pdf`; a.click()
+    URL.revokeObjectURL(url)
+    setTimeout(() => {
+      const texto = encodeURIComponent(`Olá! Segue o laudo de vistoria do imóvel em ${imovel?.logradouro || ''}, ${imovel?.cidade || ''}. O PDF foi baixado no seu dispositivo — anexe-o na conversa.`)
+      window.open(`https://wa.me/?text=${texto}`, '_blank')
+    }, 800)
   }
 
   function abrirEmail() {
@@ -446,12 +481,12 @@ export default function Vistoria() {
                 </button>
               </div>
 
-              {pdfBlob && (
-                <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                   <button onClick={abrirWhatsApp}
+                    disabled={gerandoPDF}
                     className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm"
                     style={{ background: '#25D366', color: '#fff' }}>
-                    <MessageCircle size={18} /> WhatsApp
+                    <MessageCircle size={18} /> Enviar PDF
                   </button>
                   <button onClick={abrirEmail}
                     className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm"
@@ -459,15 +494,6 @@ export default function Vistoria() {
                     <Mail size={18} /> E-mail
                   </button>
                 </div>
-              )}
-
-              {pdfBlob && typeof navigator.share === 'function' && (
-                <button onClick={handleCompartilhar}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm"
-                  style={{ border: '1.5px solid #C9A227', color: '#C9A227', background: 'transparent' }}>
-                  <Share2 size={18} /> Compartilhar (outros apps)
-                </button>
-              )}
             </>
           ) : (
             <>
