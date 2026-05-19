@@ -5,7 +5,7 @@
 
 // true  → login desativado, entra direto no app
 // false → login obrigatório
-export const BYPASS_LOGIN = true
+export const BYPASS_LOGIN = false
 
 // true  → pagamento desativado, PDF liberado direto
 // false → pagamento obrigatório (R$ 29,99)
