@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { gerarPDF } from '../lib/gerarPDF'
+import { gerarDOCX } from '../lib/gerarDOCX'
 import PDFTemplate from '../components/PDFTemplate'
 import { BYPASS_PAGAMENTO } from '../config'
 import {
   ChevronLeft, Download, FileText, MapPin, Users,
   Droplets, Zap, Flame, Key, Camera, CheckCircle, Clock,
-  Share2, Mail, MessageCircle, Pencil, Check, X,
+  Share2, Mail, MessageCircle, Pencil, Check, X, FileDown,
 } from 'lucide-react'
 
 export default function Vistoria() {
@@ -23,6 +24,7 @@ export default function Vistoria() {
   const [pagamento,     setPagamento]     = useState(null)
   const [carregando,    setCarregando]    = useState(true)
   const [gerandoPDF,    setGerandoPDF]    = useState(false)
+  const [gerandoDOCX,   setGerandoDOCX]   = useState(false)
   const [pdfBlob,       setPdfBlob]       = useState(null)
   const [pdfNome,       setPdfNome]       = useState('')
   const [compartilhando, setCompartilhando] = useState(false)
@@ -101,7 +103,38 @@ export default function Vistoria() {
     setVistoria((prev) => ({ ...prev, observacoes: obs }))
   }
 
-  // ── PDF ──────────────────────────────────────────────────────────────────────
+  async function salvarItensNaoVistoriados(v) {
+    await supabase.from('vistorias').update({ itens_nao_vistoriados: v }).eq('id', id)
+    setVistoria((prev) => ({ ...prev, itens_nao_vistoriados: v }))
+  }
+
+  async function salvarCampoVistoria(campo, valor) {
+    await supabase.from('vistorias').update({ [campo]: valor }).eq('id', id)
+    setVistoria((prev) => ({ ...prev, [campo]: valor }))
+  }
+
+  async function salvarImovel(campo, valor) {
+    if (!imovel?.id) return
+    await supabase.from('imoveis').update({ [campo]: valor }).eq('id', imovel.id)
+    setImovel((prev) => ({ ...prev, [campo]: valor }))
+  }
+
+  async function salvarPessoa(pessoaId, campo, valor) {
+    await supabase.from('pessoas').update({ [campo]: valor }).eq('id', pessoaId)
+    setPessoas((prev) => prev.map((p) => p.id === pessoaId ? { ...p, [campo]: valor } : p))
+  }
+
+  async function salvarItemComodo(comodoId, itemId, dados) {
+    const comodo = comodos.find((c) => c.id === comodoId)
+    if (!comodo) return
+    const novosItens = comodo.itens.map((it) => it.id === itemId ? { ...it, ...dados } : it)
+    await supabase.from('comodos').update({ itens: novosItens }).eq('id', comodoId)
+    setComodos((prev) => prev.map((c) =>
+      c.id === comodoId ? { ...c, itens: novosItens } : c
+    ))
+  }
+
+  // ── PDF / DOCX ────────────────────────────────────────────────────────────────
 
   async function handleGerarPDF() {
     setGerandoPDF(true)
@@ -119,6 +152,22 @@ export default function Vistoria() {
       alert('Erro ao gerar PDF. Tente novamente.')
     }
     setGerandoPDF(false)
+  }
+
+  async function handleGerarDOCX() {
+    setGerandoDOCX(true)
+    try {
+      const nome = `laudo-vistoria-${imovel?.cidade || 'imovel'}-${vistoria?.data_vistoria || 'sem-data'}`
+      const blob = await gerarDOCX(nome, { vistoria, imovel, pessoas, testemunhas, comodos, medidores })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `${nome}.docx`; a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error(err)
+      alert('Erro ao gerar Word. Tente novamente.')
+    }
+    setGerandoDOCX(false)
   }
 
   async function handleCompartilhar() {
@@ -201,6 +250,66 @@ export default function Vistoria() {
           )}
         </div>
 
+        {/* Dados gerais — editáveis */}
+        <Card titulo="Dados Gerais">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Vistoriador</p>
+              <CampoEditavel valor={vistoria.vistoriador || ''} tipo="input"
+                placeholder="Nome do vistoriador"
+                onSalvar={(v) => salvarCampoVistoria('vistoriador', v)}
+                className="text-sm text-gray-800 w-full" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Data</p>
+              <CampoEditavel valor={vistoria.data_vistoria || ''} tipo="input"
+                placeholder="aaaa-mm-dd"
+                onSalvar={(v) => salvarCampoVistoria('data_vistoria', v)}
+                className="text-sm text-gray-800 w-full" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Nº Contrato</p>
+              <CampoEditavel valor={vistoria.numero_contrato || ''} tipo="input"
+                placeholder="—"
+                onSalvar={(v) => salvarCampoVistoria('numero_contrato', v)}
+                className="text-sm text-gray-800 w-full" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Prazo contestação</p>
+              <CampoEditavel valor={vistoria.prazo_contestacao ? String(vistoria.prazo_contestacao) : '7'} tipo="input"
+                placeholder="7"
+                onSalvar={(v) => salvarCampoVistoria('prazo_contestacao', parseInt(v) || 7)}
+                className="text-sm text-gray-800 w-full" />
+            </div>
+          </div>
+        </Card>
+
+        {/* Imóvel — editável */}
+        {imovel && (
+          <Card titulo="Imóvel">
+            <div className="space-y-2">
+              {[
+                { label: 'Logradouro', campo: 'logradouro' },
+                { label: 'Número',     campo: 'numero' },
+                { label: 'Complemento', campo: 'complemento' },
+                { label: 'Bairro',     campo: 'bairro' },
+                { label: 'Cidade',     campo: 'cidade' },
+                { label: 'CEP',        campo: 'cep' },
+                { label: 'Tipo',       campo: 'tipo_imovel' },
+                { label: 'Área (m²)',  campo: 'area_m2' },
+              ].map(({ label, campo }) => (
+                <div key={campo} className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 w-24 shrink-0">{label}</span>
+                  <CampoEditavel valor={imovel[campo] || ''} tipo="input"
+                    placeholder="—"
+                    onSalvar={(v) => salvarImovel(campo, v)}
+                    className="text-sm text-gray-800 flex-1" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         {/* Resumo */}
         <div className="grid grid-cols-3 gap-3">
           <ResumoCard icon={<Users size={18} className="text-blue-500" />}  label="Pessoas"  valor={pessoas.length} />
@@ -208,63 +317,66 @@ export default function Vistoria() {
           <ResumoCard icon={<Camera size={18} className="text-green-500" />} label="Fotos"    valor={totalFotos} />
         </div>
 
-        {/* Envolvidos */}
+        {/* Envolvidos — editáveis */}
         {pessoas.length > 0 && (
           <Card titulo="Envolvidos">
-            <div className="space-y-2">
-              {proprietarios.map((p, i) => <PessoaRow key={i} papel="Proprietário" pessoa={p} />)}
-              {inquilinos.map((p, i) => <PessoaRow key={i} papel="Inquilino" pessoa={p} />)}
+            <div className="space-y-4">
+              {proprietarios.map((pe, i) => (
+                <PessoaEditavel key={pe.id || i} papel="Proprietário" pessoa={pe} onSalvar={salvarPessoa} />
+              ))}
+              {inquilinos.map((pe, i) => (
+                <PessoaEditavel key={pe.id || i} papel="Inquilino" pessoa={pe} onSalvar={salvarPessoa} />
+              ))}
             </div>
           </Card>
         )}
 
         {/* Cômodos — editáveis */}
-        {comodos.length > 0 && (
-          <Card titulo="Cômodos e Fotos">
-            <div className="space-y-5">
-              {comodos.map((c) => (
-                <div key={c.id}>
-                  {/* Nome do cômodo editável */}
-                  <CampoEditavel
-                    valor={c.nome}
-                    onSalvar={(v) => salvarNomeComodo(c.id, v)}
-                    tipo="input"
-                    className="font-semibold text-sm text-gray-800 mb-2"
-                  />
-
-                  {c.fotos?.length > 0 ? (
-                    <div className="space-y-3 mt-2">
-                      {c.fotos.map((f, fi) => (
-                        <div key={f.id} className="rounded-xl overflow-hidden bg-white" style={{ border: '1px solid #E4E0D8' }}>
-                          <div className="relative">
-                            <img src={f.url_publica} alt="foto" className="w-full h-44 object-cover" />
-                            <span className="absolute bottom-2 left-2 text-xs font-semibold px-2 py-0.5 rounded-full"
-                              style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
-                              Foto {fi + 1}
-                            </span>
-                          </div>
-                          {/* Descrição editável */}
-                          <div className="px-3 py-2.5">
-                            <CampoEditavel
-                              valor={f.descricao_editada || f.descricao_ia || ''}
-                              placeholder="Adicionar descrição..."
-                              onSalvar={(v) => salvarDescricaoFoto(c.id, f.id, v)}
-                              tipo="textarea"
-                              rows={3}
-                              className="text-xs text-gray-600 leading-relaxed w-full"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic mt-1">Sem fotos</p>
-                  )}
+        {comodos.length > 0 && comodos.map((c) => (
+          <Card key={c.id} titulo={
+            <CampoEditavel valor={c.nome} onSalvar={(v) => salvarNomeComodo(c.id, v)}
+              tipo="input" className="font-semibold text-sm text-gray-800" />
+          }>
+            {/* Checklist de condições */}
+            {c.itens?.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Checklist</p>
+                <div className="space-y-1.5">
+                  {c.itens.map((item) => (
+                    <ItemCondicao key={item.id} item={item}
+                      onSalvar={(dados) => salvarItemComodo(c.id, item.id, dados)} />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {/* Fotos */}
+            {c.fotos?.length > 0 ? (
+              <div className="space-y-3">
+                {c.fotos.map((f, fi) => (
+                  <div key={f.id} className="rounded-xl overflow-hidden bg-white" style={{ border: '1px solid #E4E0D8' }}>
+                    <div className="relative">
+                      <img src={f.url_publica} alt="foto" className="w-full h-44 object-cover" />
+                      <span className="absolute bottom-2 left-2 text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                        Foto {fi + 1}
+                      </span>
+                    </div>
+                    <div className="px-3 py-2.5">
+                      <CampoEditavel valor={f.descricao_editada || f.descricao_ia || ''}
+                        placeholder="Adicionar descrição..."
+                        onSalvar={(v) => salvarDescricaoFoto(c.id, f.id, v)}
+                        tipo="textarea" rows={3}
+                        className="text-xs text-gray-600 leading-relaxed w-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">Sem fotos</p>
+            )}
           </Card>
-        )}
+        ))}
 
         {/* Medidores — editáveis */}
         {medidores && (
@@ -288,14 +400,20 @@ export default function Vistoria() {
 
         {/* Observações gerais — editável */}
         <Card titulo="Observações Gerais">
-          <CampoEditavel
-            valor={vistoria.observacoes || ''}
+          <CampoEditavel valor={vistoria.observacoes || ''}
             placeholder="Adicione observações gerais sobre a vistoria..."
             onSalvar={salvarObservacoes}
-            tipo="textarea"
-            rows={4}
-            className="text-sm text-gray-600 leading-relaxed w-full"
-          />
+            tipo="textarea" rows={4}
+            className="text-sm text-gray-600 leading-relaxed w-full" />
+        </Card>
+
+        {/* Itens não vistoriados — editável */}
+        <Card titulo="Itens Não Vistoriados">
+          <CampoEditavel valor={vistoria.itens_nao_vistoriados || ''}
+            placeholder="Informe itens que não puderam ser vistoriados..."
+            onSalvar={salvarItensNaoVistoriados}
+            tipo="textarea" rows={3}
+            className="text-sm text-gray-600 leading-relaxed w-full" />
         </Card>
 
         {/* Ação: pagar ou baixar/compartilhar PDF */}
@@ -309,14 +427,24 @@ export default function Vistoria() {
                 </p>
               </div>
 
-              <button
-                onClick={handleGerarPDF}
-                disabled={gerandoPDF}
-                className="w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition disabled:opacity-60"
-                style={{ background: 'linear-gradient(135deg, #C9A227, #E8C547)', color: '#0a0a0a' }}>
-                <Download size={20} />
-                {gerandoPDF ? 'Gerando PDF...' : pdfBlob ? 'Baixar PDF novamente' : 'Gerar e Baixar PDF'}
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleGerarPDF}
+                  disabled={gerandoPDF || gerandoDOCX}
+                  className="py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition disabled:opacity-60"
+                  style={{ background: 'linear-gradient(135deg, #C9A227, #E8C547)', color: '#0a0a0a' }}>
+                  <Download size={18} />
+                  {gerandoPDF ? 'Gerando...' : 'Baixar PDF'}
+                </button>
+                <button
+                  onClick={handleGerarDOCX}
+                  disabled={gerandoPDF || gerandoDOCX}
+                  className="py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition disabled:opacity-60"
+                  style={{ background: '#2B579A', color: '#fff' }}>
+                  <FileDown size={18} />
+                  {gerandoDOCX ? 'Gerando...' : 'Baixar Word'}
+                </button>
+              </div>
 
               {pdfBlob && (
                 <div className="grid grid-cols-2 gap-2">
@@ -497,11 +625,119 @@ function MedidorEditavel({ icon, label, campo, valor, onSalvar }) {
   )
 }
 
+// ─── Pessoa editável ──────────────────────────────────────────────────────────
+function PessoaEditavel({ papel, pessoa, onSalvar }) {
+  return (
+    <div className="rounded-lg p-3" style={{ background: '#F7F6F3', border: '1px solid #E4E0D8' }}>
+      <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#C9A227' }}>{papel}</p>
+      <div className="space-y-1.5">
+        {[
+          { label: 'Nome',     campo: 'nome' },
+          { label: 'CPF',      campo: 'cpf' },
+          { label: 'RG',       campo: 'rg' },
+          { label: 'Telefone', campo: 'telefone' },
+          { label: 'E-mail',   campo: 'email' },
+        ].map(({ label, campo }) => (
+          <div key={campo} className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 w-16 shrink-0">{label}</span>
+            <CampoEditavel
+              valor={pessoa[campo] || ''}
+              tipo="input"
+              placeholder="—"
+              onSalvar={(v) => onSalvar(pessoa.id, campo, v)}
+              className="text-sm text-gray-800 flex-1"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Item de checklist com condição editável ──────────────────────────────────
+function ItemCondicao({ item, onSalvar }) {
+  const COND = {
+    bom:     { bg: '#dcfce7', color: '#15803d', label: 'Bom' },
+    regular: { bg: '#fef9c3', color: '#a16207', label: 'Regular' },
+    ruim:    { bg: '#fee2e2', color: '#b91c1c', label: 'Ruim' },
+  }
+  const [editandoObs, setEditandoObs] = useState(false)
+  const [rascunhoObs, setRascunhoObs] = useState(item.obs || '')
+  const [salvando, setSalvando] = useState(false)
+
+  async function mudarCondicao(nova) {
+    setSalvando(true)
+    await onSalvar({ condicao: nova === item.condicao ? null : nova })
+    setSalvando(false)
+  }
+
+  async function salvarObs() {
+    await onSalvar({ obs: rascunhoObs })
+    setEditandoObs(false)
+  }
+
+  return (
+    <div className="rounded-lg px-3 py-2" style={{ background: '#fff', border: '1px solid #E4E0D8' }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-700 flex-1">{item.nome}</span>
+        <div className="flex gap-1 items-center shrink-0">
+          {salvando ? (
+            <span className="text-xs text-gray-400">...</span>
+          ) : (
+            ['bom', 'regular', 'ruim'].map((c) => (
+              <button key={c}
+                onClick={() => mudarCondicao(c)}
+                className="text-xs px-2 py-0.5 rounded-full font-semibold transition-all"
+                style={{
+                  background: item.condicao === c ? COND[c].bg : '#F3F2F0',
+                  color:      item.condicao === c ? COND[c].color : '#999',
+                  border:     item.condicao === c ? `1.5px solid ${COND[c].color}33` : '1.5px solid transparent',
+                  opacity:    item.condicao && item.condicao !== c ? 0.5 : 1,
+                }}>
+                {COND[c].label}
+              </button>
+            ))
+          )}
+          <button onClick={() => setEditandoObs(!editandoObs)}
+            className="p-1 rounded transition-opacity ml-1"
+            style={{ color: '#C9A227' }} title="Observação">
+            <Pencil size={11} />
+          </button>
+        </div>
+      </div>
+      {editandoObs && (
+        <div className="mt-1.5">
+          <input type="text" value={rascunhoObs}
+            onChange={(e) => setRascunhoObs(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && salvarObs()}
+            placeholder="Observação..."
+            autoFocus
+            className="w-full text-xs rounded px-2 py-1 focus:outline-none"
+            style={{ border: '1.5px solid #C9A227', background: '#FFFBF0' }} />
+          <div className="flex gap-1 mt-1 justify-end">
+            <button onClick={() => setEditandoObs(false)}
+              className="text-xs px-2 py-0.5 rounded" style={{ background: '#F3F2F0', color: '#7A756C' }}>
+              Cancelar
+            </button>
+            <button onClick={salvarObs}
+              className="text-xs px-2 py-0.5 rounded font-semibold" style={{ background: '#C9A227', color: '#fff' }}>
+              Salvar
+            </button>
+          </div>
+        </div>
+      )}
+      {item.obs && !editandoObs && (
+        <p className="text-xs text-gray-400 italic mt-1">{item.obs}</p>
+      )}
+    </div>
+  )
+}
+
 // ─── Helpers visuais ──────────────────────────────────────────────────────────
 function Card({ titulo, children }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <h3 className="font-semibold text-gray-800 text-sm mb-3 pb-2 border-b border-gray-100">{titulo}</h3>
+      <div className="font-semibold text-gray-800 text-sm mb-3 pb-2 border-b border-gray-100">{titulo}</div>
       {children}
     </div>
   )
@@ -517,18 +753,3 @@ function ResumoCard({ icon, label, valor }) {
   )
 }
 
-function PessoaRow({ papel, pessoa }) {
-  return (
-    <div className="flex items-start gap-2 text-sm">
-      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium shrink-0 mt-0.5">
-        {papel}
-      </span>
-      <div>
-        <p className="font-medium text-gray-800">{pessoa.nome}</p>
-        <p className="text-xs text-gray-400">
-          {[pessoa.cpf && `CPF: ${pessoa.cpf}`, pessoa.rg && `RG: ${pessoa.rg}`].filter(Boolean).join(' · ')}
-        </p>
-      </div>
-    </div>
-  )
-}
