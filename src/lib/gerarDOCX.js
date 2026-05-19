@@ -106,8 +106,9 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
   const inquilinos    = (pessoas || []).filter((pe) => pe.papel === 'inquilino')
   const testemunhasList = testemunhas || []
 
-  const COND_COR   = { bom: '27AE60', regular: 'E67E22', ruim: 'E74C3C' }
-  const COND_LABEL = { bom: 'BOM', regular: 'REGULAR', ruim: 'RUIM' }
+  const COND_COR    = { bom: '27AE60', regular: 'E67E22', ruim: 'E74C3C' }
+  const COND_FUNDO  = { bom: 'EBF8F0', regular: 'FDF3E0', ruim: 'FDECEA' }
+  const COND_LABEL  = { bom: 'BOM', regular: 'REGULAR', ruim: 'RUIM' }
 
   const conteudo = []
 
@@ -303,7 +304,7 @@ export async function gerarDOCX(nomeArquivo, { vistoria, imovel, pessoas, testem
               }),
               new TableCell({
                 borders: bordas(),
-                shading: item.condicao ? { fill: COND_COR[item.condicao] + '22', type: ShadingType.CLEAR } : undefined,
+                shading: item.condicao ? { fill: COND_FUNDO[item.condicao], type: ShadingType.CLEAR } : undefined,
                 width: { size: colCond, type: WidthType.DXA },
                 margins: { top: 60, bottom: 60, left: 60, right: 60 },
                 verticalAlign: VerticalAlign.CENTER,
