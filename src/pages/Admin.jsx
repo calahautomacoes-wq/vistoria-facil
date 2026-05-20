@@ -5,7 +5,7 @@ import { ADMIN_EMAIL } from '../lib/licenca'
 import {
   Users, Plus, ChevronLeft, Check, X, Edit2, RefreshCw,
   CreditCard, Ban, BarChart2, Copy, Eye, EyeOff, Calendar,
-  TrendingUp, AlertCircle, CheckCircle, Clock, Trash2,
+  TrendingUp, AlertCircle, CheckCircle, Clock, Trash2, KeyRound, Send,
 } from 'lucide-react'
 
 const STATUS = {
@@ -323,6 +323,9 @@ function DetalheCliente({ cliente, onVoltar, onEditar, onAtualizar }) {
   const [modalCreditos, setModalCreditos] = useState(false)
   const [copiado, setCopiado] = useState(false)
   const [vistorias, setVistorias] = useState(null)
+  const [enviandoRecuperacao, setEnviandoRecuperacao] = useState(false)
+  const [recuperacaoEnviada, setRecuperacaoEnviada] = useState(false)
+  const [erroRecuperacao, setErroRecuperacao] = useState('')
 
   useEffect(() => {
     supabase.from('pagamentos_clientes').select('*').eq('cliente_id', cliente.id)
@@ -344,6 +347,22 @@ function DetalheCliente({ cliente, onVoltar, onEditar, onAtualizar }) {
   async function alterarStatus(novoStatus) {
     await supabase.from('clientes').update({ status: novoStatus }).eq('id', cliente.id)
     onAtualizar()
+  }
+
+  async function enviarRecuperacaoSenha() {
+    setEnviandoRecuperacao(true)
+    setErroRecuperacao('')
+    setRecuperacaoEnviada(false)
+    const { error } = await supabase.auth.resetPasswordForEmail(cliente.email, {
+      redirectTo: `${window.location.origin}/redefinir-senha`,
+    })
+    if (error) {
+      setErroRecuperacao('Erro ao enviar: ' + error.message)
+    } else {
+      setRecuperacaoEnviada(true)
+      setTimeout(() => setRecuperacaoEnviada(false), 5000)
+    }
+    setEnviandoRecuperacao(false)
   }
 
   async function registrarPagamento(tipo) {
@@ -497,6 +516,39 @@ function DetalheCliente({ cliente, onVoltar, onEditar, onAtualizar }) {
               <CheckCircle size={15} /> Ativar
             </button>
           )}
+        </div>
+
+        {/* Recuperação de senha */}
+        <div className="bg-white rounded-xl p-4 border border-gray-200">
+          <div className="flex items-center gap-2 mb-3">
+            <KeyRound size={15} className="text-gray-400" />
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Recuperação de Senha</p>
+          </div>
+          <p className="text-xs text-gray-500 mb-3">
+            Envia um e-mail de redefinição de senha para <strong>{cliente.email}</strong>. O cliente clica no link e cria uma nova senha.
+          </p>
+          {erroRecuperacao && (
+            <p className="text-xs text-red-600 mb-2 flex items-center gap-1">
+              <AlertCircle size={13} /> {erroRecuperacao}
+            </p>
+          )}
+          <button
+            onClick={enviarRecuperacaoSenha}
+            disabled={enviandoRecuperacao || recuperacaoEnviada}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition disabled:opacity-60"
+            style={{
+              background: recuperacaoEnviada ? '#DCFCE7' : '#F3F4F6',
+              color: recuperacaoEnviada ? '#166534' : '#374151',
+              border: recuperacaoEnviada ? '1px solid #BBF7D0' : '1px solid #E5E7EB',
+            }}>
+            {enviandoRecuperacao ? (
+              <><RefreshCw size={15} className="animate-spin" /> Enviando...</>
+            ) : recuperacaoEnviada ? (
+              <><Check size={15} /> E-mail enviado com sucesso!</>
+            ) : (
+              <><Send size={15} /> Enviar link de recuperação</>
+            )}
+          </button>
         </div>
 
         {/* Registrar pagamento rápido */}
