@@ -173,13 +173,14 @@ export default function PDFTemplate({ vistoria, imovel, pessoas, testemunhas, co
     }),
     /* Fotos */
     fotoRow: {
-      display: 'flex', gap: '12px', alignItems: 'flex-start',
-      marginBottom: '10px', padding: '7px',
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      marginBottom: '12px', padding: '8px',
       border: '1px solid #d4d0c8', borderRadius: '4px',
     },
     fotoImg: {
-      width: '188px', height: '132px', objectFit: 'cover',
-      borderRadius: '3px', border: '1px solid #d4d0c8', flexShrink: 0,
+      width: '100%', maxHeight: '220px', objectFit: 'contain',
+      borderRadius: '3px', border: '1px solid #d4d0c8',
+      background: '#f8f8f6', display: 'block',
     },
     /* Medidores */
     medGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '4px', marginBottom: '8px' },
@@ -385,8 +386,8 @@ export default function PDFTemplate({ vistoria, imovel, pessoas, testemunhas, co
                   style={s.fotoImg}
                   crossOrigin="anonymous"
                 />
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: '0 0 3px', fontSize: '8.5px', fontWeight: '800', color: '#0a0a0a', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <div style={{ width: '100%', marginTop: '6px' }}>
+                  <p style={{ margin: '0 0 2px', fontSize: '8.5px', fontWeight: '800', color: '#0a0a0a', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>
                     Foto {fi + 1}
                   </p>
                   <p style={{ margin: 0, fontSize: '10px', color: '#2a2a2a', lineHeight: '1.6', textAlign: 'justify' }}>

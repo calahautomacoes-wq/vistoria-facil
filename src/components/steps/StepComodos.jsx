@@ -6,19 +6,24 @@ import { uuid } from '../../lib/uuid'
 
 // ─── Modal de câmera via getUserMedia ─────────────────────────────────────────
 function CameraModal({ onCapturar, onFechar }) {
-  const videoRef  = useRef(null)
-  const streamRef = useRef(null)
-  const [erro, setErro]         = useState('')
-  const [pronto, setPronto]     = useState(false)
+  const videoRef   = useRef(null)
+  const streamRef  = useRef(null)
+  const [erro, setErro]           = useState('')
+  const [pronto, setPronto]       = useState(false)
   const [facingBack, setFacingBack] = useState(true)
+  const [zoomAtual, setZoomAtual] = useState(1)
+  const [zoomMin, setZoomMin]     = useState(1)
+  const [zoomMax, setZoomMax]     = useState(1)
+  const [temZoom, setTemZoom]     = useState(false)
 
   const iniciarCamera = useCallback(async (traseira = true) => {
-    // Para stream anterior se existir
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop())
     }
     setPronto(false)
     setErro('')
+    setTemZoom(false)
+    setZoomAtual(1)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -31,7 +36,20 @@ function CameraModal({ onCapturar, onFechar }) {
       streamRef.current = stream
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        videoRef.current.onloadedmetadata = () => setPronto(true)
+        videoRef.current.onloadedmetadata = () => {
+          setPronto(true)
+          // Verifica suporte a zoom nativo
+          const track = stream.getVideoTracks()[0]
+          if (track) {
+            const caps = track.getCapabilities?.()
+            if (caps?.zoom) {
+              setZoomMin(caps.zoom.min)
+              setZoomMax(caps.zoom.max)
+              setZoomAtual(caps.zoom.min)
+              setTemZoom(true)
+            }
+          }
+        }
       }
     } catch (err) {
       setErro(
@@ -48,6 +66,16 @@ function CameraModal({ onCapturar, onFechar }) {
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop())
     }
   }, [iniciarCamera])
+
+  async function aplicarZoom(valor) {
+    setZoomAtual(valor)
+    const track = streamRef.current?.getVideoTracks()[0]
+    if (track?.applyConstraints) {
+      try {
+        await track.applyConstraints({ advanced: [{ zoom: valor }] })
+      } catch (_) { /* silencioso se não suportar */ }
+    }
+  }
 
   function capturar() {
     if (!videoRef.current || !pronto) return
@@ -68,6 +96,9 @@ function CameraModal({ onCapturar, onFechar }) {
     setFacingBack(nova)
     iniciarCamera(nova)
   }
+
+  // Níveis de zoom pré-definidos visíveis como botões rápidos
+  const niveisRapidos = [0.5, 1, 2, 3].filter(n => n >= zoomMin && n <= zoomMax)
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#000' }}>
@@ -103,16 +134,48 @@ function CameraModal({ onCapturar, onFechar }) {
           style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
           <X size={20} />
         </button>
-        {/* Virar câmera (só aparece se tiver câmera frontal/traseira) */}
+        {/* Virar câmera */}
         <button onClick={alternarCamera}
           className="absolute top-4 left-4 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold"
           style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}
           title="Alternar câmera">
           🔄
         </button>
+
+        {/* Controles de zoom — aparecem só se o dispositivo suportar */}
+        {temZoom && pronto && (
+          <div className="absolute bottom-4 left-0 right-0 flex flex-col items-center gap-2 px-8">
+            {/* Botões rápidos de nível */}
+            <div className="flex gap-2">
+              {niveisRapidos.map(n => (
+                <button key={n}
+                  onClick={() => aplicarZoom(n)}
+                  className="w-10 h-10 rounded-full text-xs font-bold transition"
+                  style={{
+                    background: Math.abs(zoomAtual - n) < 0.05 ? '#C9A227' : 'rgba(0,0,0,0.6)',
+                    color: Math.abs(zoomAtual - n) < 0.05 ? '#000' : '#fff',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                  }}>
+                  {n}×
+                </button>
+              ))}
+            </div>
+            {/* Slider fino */}
+            <input
+              type="range"
+              min={zoomMin}
+              max={zoomMax}
+              step={0.1}
+              value={zoomAtual}
+              onChange={e => aplicarZoom(Number(e.target.value))}
+              className="w-full"
+              style={{ accentColor: '#C9A227' }}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Controles */}
+      {/* Barra de controles */}
       <div className="flex items-center justify-center gap-6 py-6" style={{ background: '#0a0a0a' }}>
         <button onClick={onFechar}
           className="px-5 py-2.5 rounded-xl text-sm font-semibold"
@@ -126,7 +189,7 @@ function CameraModal({ onCapturar, onFechar }) {
           style={{ background: 'linear-gradient(135deg, #C9A227, #E8C547)', boxShadow: '0 0 0 4px #C9A22744' }}>
           <Camera size={28} color="#000" />
         </button>
-        <div className="w-20" />{/* espaço para equilíbrio */}
+        <div className="w-20" />
       </div>
     </div>
   )
